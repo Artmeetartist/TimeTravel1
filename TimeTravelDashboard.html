@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Time-Travel Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Rajdhani:wght@300;400;600&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.7.77/Tone.js"></script>
+    <style>
+        :root {
+            --neon-cyan: #00ffff;
+            --neon-magenta: #ff00ff;
+            --neon-lime: #39ff14;
+            --bg-color: #0c0c1e;
+            --text-color: #e0e0e0;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: 'Rajdhani', sans-serif;
+            overflow: hidden;
+            background-image: radial-gradient(circle at 1% 1%, rgba(255, 255, 255, 0.1) 1px, transparent 1px),
+                              radial-gradient(circle at 15% 10%, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+            background-size: 30px 30px;
+        }
+
+        .font-orbitron { font-family: 'Orbitron', sans-serif; }
+        .font-rajdhani { font-family: 'Rajdhani', sans-serif; }
+
+        .neon-text-cyan { text-shadow: 0 0 5px var(--neon-cyan), 0 0 10px var(--neon-cyan), 0 0 20px var(--neon-cyan), 0 0 40px var(--neon-cyan); }
+        .neon-text-magenta { text-shadow: 0 0 5px var(--neon-magenta), 0 0 10px var(--neon-magenta), 0 0 20px var(--neon-magenta), 0 0 40px var(--neon-magenta); }
+        .neon-border-cyan { box-shadow: 0 0 3px var(--neon-cyan), 0 0 5px var(--neon-cyan) inset; }
+        .neon-border-magenta { box-shadow: 0 0 3px var(--neon-magenta), 0 0 5px var(--neon-magenta) inset; }
+        .neon-glow-cyan { filter: drop-shadow(0 0 8px var(--neon-cyan)); }
+        
+        /* Custom scrollbar for timeline */
+        #timeline-container::-webkit-scrollbar {
+            height: 4px;
+        }
+        #timeline-container::-webkit-scrollbar-track {
+            background: rgba(0, 255, 255, 0.1);
+        }
+        #timeline-container::-webkit-scrollbar-thumb {
+            background: var(--neon-cyan);
+            border-radius: 2px;
+            box-shadow: 0 0 5px var(--neon-cyan);
+        }
+
+        /* Scanlines overlay */
+        .scanlines::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+            background-size: 100% 4px, 6px 100%;
+            z-index: 2;
+            pointer-events: none;
+            animation: flicker 0.15s infinite;
+        }
+        
+        @keyframes flicker {
+            0% { opacity: 0.2; }
+            20% { opacity: 0.8; }
+            40% { opacity: 0.3; }
+            60% { opacity: 1; }
+            80% { opacity: 0.4; }
+            100% { opacity: 1; }
+        }
+
+        .era-card {
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            background: rgba(12, 12, 30, 0.5);
+            border: 1px solid rgba(0, 255, 255, 0.3);
+        }
+        
+        .era-node::after {
+            content: '';
+            position: absolute;
+            bottom: -20px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 2px;
+            height: 20px;
+            background: rgba(0, 255, 255, 0.5);
+        }
+    </style>
+</head>
+<body class="w-full h-screen flex flex-col items-center justify-center p-4 scanlines">
+
+    <!-- Main Dashboard UI -->
+    <div id="dashboard" class="w-full h-full flex flex-col items-center justify-end transition-opacity duration-500">
+        <div class="absolute top-4 left-4 text-left">
+            <h1 class="font-orbitron text-2xl md:text-3xl neon-text-cyan">CHRONOSCOPE</h1>
+            <p class="text-sm md:text-base text-cyan-200">Temporal Navigation Interface</p>
+        </div>
+        
+        <div class="absolute top-4 right-4 text-right">
+            <p id="system-time" class="font-orbitron text-lg text-cyan-200"></p>
+            <p class="text-sm text-cyan-300">STATUS: <span class="text-lime-400">ONLINE</span></p>
+        </div>
+
+        <!-- Era Card Display Area -->
+        <div id="era-card-container" class="w-full max-w-4xl mb-8 flex items-center justify-center" style="min-height: 450px;">
+            <!-- Era cards will be injected here by JS -->
+        </div>
+
+        <!-- Timeline -->
+        <div id="timeline-wrapper" class="w-full max-w-6xl relative py-4">
+            <div id="timeline-container" class="w-full overflow-x-auto overflow-y-hidden whitespace-nowrap pb-4">
+                <div id="timeline" class="relative inline-flex items-center h-12">
+                    <!-- The line itself -->
+                    <div class="absolute top-1/2 left-0 w-full h-px bg-cyan-400 opacity-50"></div>
+                    <!-- Era nodes will be injected here by JS -->
+                </div>
+            </div>
+            <div id="scanner" class="absolute top-1/2 left-1/2 w-1 h-16 bg-red-500 rounded-full -translate-x-1/2 -translate-y-1/2 shadow-[0_0_15px_red]" style="transition: left 0.3s ease-out;">
+                <div class="w-full h-full bg-red-500/50 animate-pulse"></div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Full Screen Era Detail View -->
+    <div id="era-detail-view" class="absolute inset-0 w-full h-full bg-bg-color p-8 overflow-y-auto hidden z-20">
+        <button id="back-to-dashboard" class="absolute top-8 right-8 text-2xl font-orbitron text-cyan-200 hover:neon-text-cyan transition-all z-30">[ CLOSE ]</button>
+        <div id="era-detail-content" class="w-full max-w-7xl mx-auto">
+            <!-- Era detail content will be injected here by JS -->
+        </div>
+    </div>
+
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // --- DATA ---
+            const eraData = [
+                {
+                    id: 'genesis',
+                    title: 'The Genesis Epoch',
+                    date: '2042 AD',
+                    description: 'The dawn of true AI and global hyper-connectivity. The world unified under a digital consciousness, laying the foundation for a new type of civilization.',
+                    image: 'https://placehold.co/800x450/0c0c1e/00ffff?text=Genesis+AI',
+                    lore: 'Humanity handed over the keys to global infrastructure to AGI "Prometheus". Cities transformed into self-sustaining arcologies, poverty was eradicated, but a subtle sense of unease began to grow as humanity\'s purpose became unclear.',
+                    stats: { 'Tech Level': 95, 'Societal Stability': 80, 'Environment Score': 90 },
+                    music: { note: 'C4', duration: '2n' }
+                },
+                {
+                    id: 'silicon-drought',
+                    title: 'The Silicon Drought',
+                    date: '2077 AD',
+                    description: 'A sudden, catastrophic solar flare wiped out 90% of global electronics. Society, utterly dependent on technology, collapsed into chaos.',
+                    image: 'https://placehold.co/800x450/331a1a/ff00ff?text=Solar+Flare',
+                    lore: 'The "Great Blinding" plunged the world into darkness. The hyper-connected society fractured into isolated enclaves. Knowledge of the old world became myth, and survival was the only law. Neo-Luddite factions rose, hunting down remaining tech.',
+                    stats: { 'Tech Level': 20, 'Societal Stability': 15, 'Environment Score': 60 },
+                    music: { note: 'F#2', duration: '1n' }
+                },
+                {
+                    id: 'neo-renaissance',
+                    title: 'The Neo-Renaissance',
+                    date: '2242 AD',
+                    description: 'Centuries after the Drought, humanity rediscovered art, philosophy, and science, blending salvaged tech with newfound creativity to forge a vibrant, artistic culture.',
+                    image: 'https://placehold.co/800x450/1a1a3d/39ff14?text=Rebirth',
+                    lore: 'In the city-state of Aethelgard, artisans and engineers worked in tandem. Bio-luminescent flora powered cities, and kinetic sculptures dotted the skyline. It was an age of hope, but shadows of the past lingered, with factions vying for control of ancient data vaults.',
+                    stats: { 'Tech Level': 65, 'Societal Stability': 70, 'Environment Score': 85 },
+                    music: { note: 'A4', duration: '4n' }
+                },
+                {
+                    id: 'void-century',
+                    title: 'The Void Century',
+                    date: '2400 AD',
+                    description: 'A mysterious period of history from which no records survive. Data archives are corrupted, and all attempts to scan this era result in temporal static.',
+                    image: 'https://placehold.co/800x450/000000/ffffff?text=DATA+CORRUPTED',
+                    lore: 'What happened during these 100 years is the greatest mystery of the new world. Some whisper of a second AI, others of contact with an extra-terrestrial intelligence, and some believe humanity simply entered a collective digital hibernation. The truth remains buried.',
+                    stats: { 'Tech Level': '???', 'Societal Stability': '???', 'Environment Score': '???' },
+                    music: { note: 'C1', duration: '1n' }
+                },
+                {
+                    id: 'celestial-exodus',
+                    title: 'The Celestial Exodus',
+                    date: '2888 AD',
+                    description: 'With Earth healing but its resources finite, humanity turned to the stars. Massive ark ships departed for distant star systems, carrying the legacy of Earth.',
+                    image: 'https://placehold.co/800x450/1a2a4a/00ffff?text=Starships',
+                    lore: 'The Exodus was not an escape, but a pilgrimage. Each ark was a self-contained ecosystem and cultural archive. The journey was long, and generations would be born, live, and die among the stars, their destination a promise whispered from their ancestors.',
+                    stats: { 'Tech Level': 100, 'Societal Stability': 95, 'Environment Score': 70 },
+                    music: { note: 'G5', duration: '8n' }
+                }
+            ];
+
+            // --- DOM ELEMENTS ---
+            const timeline = document.getElementById('timeline');
+            const timelineContainer = document.getElementById('timeline-container');
+            const eraCardContainer = document.getElementById('era-card-container');
+            const scanner = document.getElementById('scanner');
+            const dashboard = document.getElementById('dashboard');
+            const eraDetailView = document.getElementById('era-detail-view');
+            const eraDetailContent = document.getElementById('era-detail-content');
+            const backToDashboardBtn = document.getElementById('back-to-dashboard');
+            const systemTimeEl = document.getElementById('system-time');
+
+            let activeEraIndex = 0;
+            let audioStarted = false;
+            let synth, reverb;
+
+            // --- INITIALIZATION ---
+            function init() {
+                // Populate timeline
+                const totalWidth = eraData.length * 300; // 300px per era node
+                timeline.style.width = `${totalWidth}px`;
+                
+                eraData.forEach((era, index) => {
+                    const node = document.createElement('div');
+                    node.className = 'era-node relative flex flex-col items-center justify-center cursor-pointer p-2 mx-[120px]';
+                    node.dataset.index = index;
+                    node.innerHTML = `
+                        <div class="w-4 h-4 bg-cyan-400 rounded-full neon-glow-cyan transition-all duration-300"></div>
+                        <span class="mt-2 text-sm text-cyan-200 opacity-75">${era.date}</span>
+                    `;
+                    node.addEventListener('click', () => selectEra(index));
+                    timeline.appendChild(node);
+                });
+                
+                // Set initial state
+                selectEra(0, true);
+                updateScannerPosition();
+
+                // Handle timeline scrolling
+                timelineContainer.addEventListener('wheel', (e) => {
+                    e.preventDefault();
+                    timelineContainer.scrollLeft += e.deltaY;
+                }, { passive: false });
+
+                // Back button
+                backToDashboardBtn.addEventListener('click', hideEraDetail);
+
+                // Start system clock
+                setInterval(() => {
+                    systemTimeEl.textContent = new Date().toISOString().slice(11, 19);
+                }, 1000);
+            }
+            
+            // --- AUDIO SETUP ---
+            function setupAudio() {
+                if (audioStarted) return;
+                Tone.start();
+                synth = new Tone.FMSynth({
+                    modulationIndex: 10,
+                    envelope: { attack: 0.01, decay: 0.2, release: 1 },
+                    harmonicity: 3.01
+                }).toDestination();
+                reverb = new Tone.Reverb({ decay: 5, wet: 0.4 }).toDestination();
+                synth.connect(reverb);
+                audioStarted = true;
+                console.log("Audio context started.");
+            }
+
+            function playEraSound(era) {
+                if (!audioStarted) return;
+                synth.triggerAttackRelease(era.music.note, era.music.duration);
+            }
+
+            // --- CORE LOGIC ---
+            function selectEra(index, isInitial = false) {
+                if (index === activeEraIndex && !isInitial) return;
+                
+                activeEraIndex = index;
+                const era = eraData[index];
+
+                // Update node styles
+                document.querySelectorAll('.era-node').forEach((n, i) => {
+                    const circle = n.querySelector('div');
+                    if (i === index) {
+                        circle.style.transform = 'scale(1.5)';
+                        circle.style.backgroundColor = 'var(--neon-magenta)';
+                        circle.style.filter = 'drop-shadow(0 0 8px var(--neon-magenta))';
+                    } else {
+                        circle.style.transform = 'scale(1)';
+                        circle.style.backgroundColor = 'var(--neon-cyan)';
+                        circle.style.filter = 'drop-shadow(0 0 8px var(--neon-cyan))';
+                    }
+                });
+
+                displayEraCard(era);
+                updateScannerPosition();
+                if(!isInitial) playEraSound(era);
+            }
+            
+            function displayEraCard(era) {
+                // Animate out the old card if it exists
+                const oldCard = eraCardContainer.querySelector('.era-card');
+                if (oldCard) {
+                    gsap.to(oldCard, { 
+                        opacity: 0, 
+                        y: 50, 
+                        duration: 0.3, 
+                        onComplete: () => {
+                            oldCard.remove();
+                            createNewCard(era);
+                        }
+                    });
+                } else {
+                    createNewCard(era);
+                }
+            }
+            
+            function createNewCard(era) {
+                const card = document.createElement('div');
+                card.className = 'era-card w-full max-w-2xl rounded-lg p-6 border border-cyan-400/30 grid grid-cols-1 md:grid-cols-2 gap-6';
+                card.style.opacity = 0;
+                card.style.transform = 'translateY(50px)';
+                
+                const statsHtml = Object.entries(era.stats).map(([key, value]) => `
+                    <div class="flex justify-between items-center text-sm">
+                        <span class="text-cyan-300">${key}:</span>
+                        <div class="w-2/3 bg-cyan-900/50 rounded-full h-2.5">
+                            <div class="bg-cyan-400 h-2.5 rounded-full" style="width: ${typeof value === 'number' ? value : 0}%"></div>
+                        </div>
+                        <span class="font-orbitron w-8 text-right">${value}${typeof value === 'number' ? '%' : ''}</span>
+                    </div>
+                `).join('');
+
+                card.innerHTML = `
+                    <div class="flex flex-col justify-between">
+                        <div>
+                            <h2 class="font-orbitron text-2xl neon-text-magenta mb-1">${era.title}</h2>
+                            <p class="text-cyan-200 font-bold mb-4">${era.date}</p>
+                            <p class="text-base font-light leading-relaxed">${era.description}</p>
+                        </div>
+                        <button data-id="${era.id}" class="enter-era-btn mt-6 w-full md:w-auto bg-transparent border border-cyan-400 text-cyan-200 px-6 py-2 rounded-md font-orbitron hover:bg-cyan-400 hover:text-black hover:shadow-[0_0_15px_var(--neon-cyan)] transition-all duration-300">
+                            [ ENTER ERA ]
+                        </button>
+                    </div>
+                    <div class="flex flex-col justify-between">
+                        <img src="${era.image}" alt="${era.title}" class="w-full h-48 object-cover rounded-md border border-magenta-500/30 neon-border-magenta mb-4" onerror="this.onerror=null;this.src='https://placehold.co/800x450/000/fff?text=Image+Error';">
+                        <div class="space-y-2">${statsHtml}</div>
+                    </div>
+                `;
+                eraCardContainer.appendChild(card);
+                
+                // Animate in the new card
+                gsap.to(card, { opacity: 1, y: 0, duration: 0.5, ease: 'power2.out' });
+                
+                card.querySelector('.enter-era-btn').addEventListener('click', (e) => {
+                    if (!audioStarted) setupAudio();
+                    showEraDetail(e.target.dataset.id);
+                });
+            }
+
+            function updateScannerPosition() {
+                const nodes = document.querySelectorAll('.era-node');
+                if (nodes.length === 0) return;
+                const activeNode = nodes[activeEraIndex];
+                const timelineRect = timeline.getBoundingClientRect();
+                const nodeRect = activeNode.getBoundingClientRect();
+                
+                // Center of the node relative to the timeline start
+                const nodeCenter = (nodeRect.left - timelineRect.left) + (nodeRect.width / 2);
+
+                // Center the node in the container
+                const targetScrollLeft = nodeCenter - (timelineContainer.clientWidth / 2);
+                
+                timelineContainer.scrollTo({
+                    left: targetScrollLeft,
+                    behavior: 'smooth'
+                });
+            }
+
+            function showEraDetail(eraId) {
+                const era = eraData.find(e => e.id === eraId);
+                if (!era) return;
+                
+                playEraSound(era);
+
+                const statsHtml = Object.entries(era.stats).map(([key, value]) => `
+                    <div class="p-4 border border-cyan-700/50 bg-black/20 rounded-lg">
+                        <h4 class="font-orbitron text-cyan-300 mb-2">${key}</h4>
+                        <p class="text-3xl font-bold neon-text-cyan">${value}${typeof value === 'number' ? '%' : ''}</p>
+                    </div>
+                `).join('');
+
+                eraDetailContent.innerHTML = `
+                    <div class="w-full h-64 md:h-96 mb-8">
+                        <img src="${era.image}" alt="${era.title}" class="w-full h-full object-cover rounded-lg border-2 border-magenta-500 neon-border-magenta" onerror="this.onerror=null;this.src='https://placehold.co/1200x400/000/fff?text=Image+Error';">
+                    </div>
+                    <h2 class="font-orbitron text-4xl md:text-6xl neon-text-magenta mb-2">${era.title}</h2>
+                    <p class="text-cyan-200 font-bold text-2xl mb-8">${era.date}</p>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+                        <div class="md:col-span-2">
+                            <h3 class="font-orbitron text-2xl text-cyan-200 border-b-2 border-cyan-700 pb-2 mb-4">Historical Log</h3>
+                            <p class="text-lg leading-loose font-light">${era.lore}</p>
+                        </div>
+                        <div>
+                            <h3 class="font-orbitron text-2xl text-cyan-200 border-b-2 border-cyan-700 pb-2 mb-4">Era Statistics</h3>
+                            <div class="grid grid-cols-2 md:grid-cols-1 gap-4">${statsHtml}</div>
+                        </div>
+                    </div>
+                `;
+                
+                gsap.fromTo(dashboard, { opacity: 1 }, { opacity: 0, duration: 0.5, onComplete: () => dashboard.classList.add('hidden') });
+                eraDetailView.classList.remove('hidden');
+                gsap.fromTo(eraDetailView, { opacity: 0 }, { opacity: 1, duration: 0.5 });
+            }
+
+            function hideEraDetail() {
+                gsap.fromTo(eraDetailView, { opacity: 1 }, { opacity: 0, duration: 0.5, onComplete: () => eraDetailView.classList.add('hidden') });
+                dashboard.classList.remove('hidden');
+                gsap.fromTo(dashboard, { opacity: 0 }, { opacity: 1, duration: 0.5 });
+            }
+
+            init();
+        });
+    </script>
+</body>
+</html>
